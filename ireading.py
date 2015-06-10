@@ -18,7 +18,7 @@ def pre_proc(text):
         # UCS-2
         high_points = re.compile(u'[\uD800-\uDBFF][\uDC00-\uDFFF]')
     link = re.compile(r'http://t\.cn/\w{7}')
-    emotions = re.compile(r'\[.{2,8}\]')
+    emotions = re.compile(r'\[.{1,8}\]')
     text = emotions.sub('', text)
     text = high_points.sub('', text)
     text = link.sub('', text)
@@ -76,8 +76,21 @@ def get_sem(text):
     return words
 
 
-def get_book(q):
-    res = requests.get('https://api.douban.com/v2/book/search?q=%s&count=10' % q)
+def get_books(q):
+    books = []
+    res = requests.get('https://api.douban.com/v2/book/search?q=%s&count=10' % q.encode('utf-8'))
+    res = json.loads(res.content)
+    for b in res['books']:
+        books.append({
+            'id': b.get('id', ''),
+            'title': b.get('title', ''),
+            'subtitle': b.get('subtitle', ''),
+            'author': b.get('author', []),
+            'url': b.get('url', ''),
+            'image': b.get('images', {}).get('small', ''),
+            'rate': b.get('rating', {}).get('average', '5')
+        })
+    return books
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -86,7 +99,7 @@ class MainHandler(tornado.web.RequestHandler):
         client = kwargs['client']
         uid = kwargs['uid']
 
-        data = client.statuses.home_timeline.get(count=20, page=1, feature=1, trim_user=1)
+        data = client.statuses.home_timeline.get(count=30, page=1, feature=1, trim_user=1)
 
         till_id = data['next_cursor']
 
@@ -107,8 +120,12 @@ class MainHandler(tornado.web.RequestHandler):
         words = sorted(words, key=lambda x: x['rate'], reverse=True)
 
         #搜索
+        books = []
+        for w in words[:10]:
+            books.append(get_books(w['word']))
+            # break
 
-        self.write(json.dumps(words))
+        self.write(json.dumps(books))
 
 
 application = tornado.web.Application([
